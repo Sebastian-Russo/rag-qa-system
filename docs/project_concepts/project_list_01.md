@@ -13,6 +13,19 @@ The Full Project List
 
 -------------------------------------------------------------------------------------------
 
+## Data types across projects so far:
+
+Project                     Input Data                      Output Type
+0 - MNISTImage              (28x28 pixel grid)              Multi-class (10 digits)
+1 - ChurnTabular            (structured rows/columns)       Binary (churn yes/no)
+2 - SentimentText           (variable length strings)       Binary (positive/negative)
+3 - StockTime series        (sequential numerical)          Regression (continuous price)
+4 - Text GenText            (sequential characters/tokens)  Generative (next token prediction)
+5 - RAGText documents       (unstructured)                  Generative (natural language answer)
+6 - Agent                   TBD                             ReAct, LangChain Agents, AutoGPT, CrewAI, function-calling LLMs
+
+-------------------------------------------------------------------------------------------
+
 ## Classical ML vs Deep Learning
 
 Classical ML is what you used in the churn predictor — logistic regression, random forests, decision trees. You hand-engineer the features (age, tenure, monthly charges), feed them in, and the model learns relatively simple mathematical relationships between those features and the output. These models have thousands to maybe millions of parameters. They're fast, interpretable, and often good enough. Your churn predictor and the logistic regression sentiment model are both classical ML.
@@ -84,3 +97,8 @@ Embeddings — turning things (words, sentences, images) into vectors. This will
 Attention mechanism — the core innovation of transformers. Understanding this deeply will connect BERT, GPT-2, RAG, and agents all together.
 
 -------------------------------------------------------------------------------------------
+
+## How it connects:
+
+The LSTM here and the character RNN in the text generator are the same architecture family — both recurrent, both process sequences, both maintain memory. The difference is the task: regression (predict a number) vs generation (predict the next character). You saw LSTMs struggle in both cases — stock prediction couldn't beat naive, and the character RNN produced gibberish. Transformers (BERT, GPT-2) ended up being the better architecture for text.
+

@@ -1,4 +1,10 @@
-# Types of RAG Systems
+# RAG (Project 5)
+
+breaks that pattern. You're not training a model at all. You're wiring together pre-trained components — an embedding model to vectorize text, a vector database to store and search, and an LLM to generate answers. The skill is in the architecture and pipeline design, not in training. How you chunk documents, which embedding model you choose, how many chunks you retrieve, how you format the prompt to the LLM — those decisions determine quality, not gradient descent.
+
+--------------------------------------------------------------------------------
+
+## Types of RAG Systems
 
 **Basic RAG** — what most people build first. You chunk documents, embed them, store in a vector database, retrieve relevant chunks on query, pass to LLM for answer. Simple pipeline: question → search → answer. This is what we'll build.
 
