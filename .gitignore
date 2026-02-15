@@ -3,28 +3,13 @@ data/raw/
 data/processed/
 data/vectorstore/
 
-# Models
-models/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.env
-.venv/
-
-# Training artifacts
-results/
-logs/
+# Model files (not src/models which contains our code)
 *.pt
 *.bin
 *.pkl
 *.npy
+# Only ignore top-level models/ folder, not src/models/
+/models/
 
 # OS
 .DS_Store
