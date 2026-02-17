@@ -1,5 +1,5 @@
 """
-Phase 3: Retrieval and Answer Generation
+Phase 3: Retrieval and Answer Generation (Interactive)
 Takes a question, finds relevant chunks, sends to LLM for answer
 
 THE RAG PIPELINE:
@@ -8,6 +8,23 @@ THE RAG PIPELINE:
 3. Find most similar chunks using cosine similarity
 4. Send chunks + question to LLM
 5. LLM reads the chunks and answers the question
+
+ANALOGY - THE LIBRARY:
+Imagine a massive library with 12,921 index cards (our chunks).
+Each card has a book passage written on it.
+
+- The EMBEDDING MODEL is a librarian who reads each card and assigns
+  it a location in a giant 384-dimensional room. Cards about similar
+  topics get placed near each other.
+
+- When you ask a QUESTION, the librarian reads your question and
+  figures out where in the room it belongs.
+
+- RETRIEVAL is the librarian walking to that spot in the room and
+  grabbing the 5 closest cards.
+
+- GENERATION is handing those 5 cards to a reader (Claude) and
+  saying "answer this question using ONLY what's on these cards."
 """
 import pickle
 import numpy as np
@@ -15,14 +32,21 @@ from numpy.linalg import norm
 from sentence_transformers import SentenceTransformer
 import requests
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 print("=" * 60)
-print("PHASE 3: RAG RETRIEVAL + GENERATION")
+print("HARRY POTTER RAG Q&A SYSTEM")
 print("=" * 60)
 
 # ============================================================
 # LOAD EMBEDDINGS AND CHUNKS
 # ============================================================
+# ANALOGY: Loading all 12,921 index cards and their locations
+# in the 384-dimensional room. We prepared these in Phase 2.
 print("\nLoading vector store...")
 embeddings = np.load("data/vectorstore/embeddings.npy")
 with open("data/vectorstore/chunks.pkl", "rb") as f:
@@ -32,6 +56,11 @@ print(f"✓ Loaded {len(chunks)} chunks with {embeddings.shape[1]}-dim vectors")
 # ============================================================
 # LOAD EMBEDDING MODEL (same one used to embed chunks)
 # ============================================================
+# ANALOGY: Hiring the same librarian who organized the cards.
+# CRITICAL: Must be the same model! A different model would
+# place things in different locations — like two librarians
+# with different filing systems. Your question would end up
+# in the wrong part of the room.
 print("\nLoading embedding model...")
 embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 print("✓ Embedding model loaded")
@@ -43,24 +72,34 @@ def retrieve(query, top_k=5):
     """
     Find the most relevant chunks for a query
 
-    1. Embed the query into a vector
-    2. Compare against all chunk vectors
-    3. Return top_k most similar chunks
+    ANALOGY: You hand your question to the librarian.
+    The librarian reads it, walks to the right area of the room,
+    and grabs the closest cards.
 
     COSINE SIMILARITY:
-    - 1.0 = identical meaning
-    - 0.0 = completely unrelated
-    - Higher = more relevant
+    - Measures the angle between two vectors
+    - 1.0 = pointing same direction = identical meaning
+    - 0.0 = perpendicular = completely unrelated
+    - Think of it like compass directions:
+      "Harry cast a spell" and "Potter used magic" point roughly north
+      "Harry cast a spell" and "Dumbledore ate dinner" point in
+      different directions entirely
     """
-    # Embed the question
+    # STEP 1: Convert your question into a vector
+    # ANALOGY: The librarian reads your question and figures out
+    # where in the room it belongs
     query_vector = embed_model.encode([query])[0]
 
-    # Calculate similarity against all chunks
+    # STEP 2: Calculate similarity between your question and ALL chunks
+    # ANALOGY: The librarian measures the distance from your question's
+    # spot to every single card in the room (all 12,921 of them)
     similarities = np.dot(embeddings, query_vector) / (
         norm(embeddings, axis=1) * norm(query_vector)
     )
 
-    # Get top_k most similar
+    # STEP 3: Grab the top_k most similar chunks
+    # ANALOGY: The librarian picks up the 5 closest cards and
+    # hands them to you, sorted by relevance
     top_indices = np.argsort(similarities)[::-1][:top_k]
 
     results = []
@@ -77,21 +116,31 @@ def retrieve(query, top_k=5):
 # ============================================================
 # GENERATION FUNCTION (Claude API)
 # ============================================================
-ANTHROPIC_API_KEY = "YOUR_API_KEY_HERE"  # You'll add your key
-
 def generate_answer(query, context_chunks):
     """
     Send retrieved chunks + question to Claude
 
-    The system prompt restricts Claude to ONLY use
-    the provided context — no outside knowledge
+    ANALOGY: You hand the 5 index cards to a reader (Claude) along
+    with your question. You tell the reader:
+    "Answer my question using ONLY what's written on these cards.
+     If the answer isn't on the cards, say so."
+
+    The reader (Claude) is smart — it can synthesize info across
+    multiple cards, infer connections, and write a clean answer.
+    But it's RESTRICTED to only use what's on the cards.
+
+    This is the key difference from just asking Claude directly:
+    - Normal Claude: Uses everything it learned during training
+    - RAG Claude: Only uses the specific passages we retrieved
     """
-    # Build context from retrieved chunks
+    # Build context string from retrieved chunks
+    # ANALOGY: Laying out the 5 index cards on the table
     context = "\n\n---\n\n".join([
         f"[Passage {i+1}]:\n{chunk['text']}"
         for i, chunk in enumerate(context_chunks)
     ])
 
+    # Make API call with explicit timeout to prevent hanging
     response = requests.post(
         "https://api.anthropic.com/v1/messages",
         headers={
@@ -120,10 +169,16 @@ Question: {query}
 Answer based ONLY on the passages above."""
                 }
             ]
-        }
+        },
+        timeout=30  # 30 second timeout to prevent indefinite hanging
     )
 
     data = response.json()
+
+    # Error handling in case API call fails
+    if "content" not in data:
+        return f"API Error: {data.get('error', {}).get('message', 'Unknown error')}"
+
     return data["content"][0]["text"]
 
 # ============================================================
@@ -132,11 +187,19 @@ Answer based ONLY on the passages above."""
 def ask(question, top_k=5, show_sources=True):
     """
     Full RAG pipeline: retrieve + generate
+
+    ANALOGY - FULL FLOW:
+    1. You walk into the library and ask a question
+    2. Librarian finds the 5 most relevant index cards
+    3. Librarian hands the cards to the reader (Claude)
+    4. Reader studies the cards and writes you an answer
+    5. You get the answer + can see which cards were used
     """
     print(f"\nQuestion: {question}")
     print("-" * 60)
 
     # Step 1: Retrieve
+    # ANALOGY: Librarian searches the room for relevant cards
     print("Retrieving relevant passages...")
     results = retrieve(question, top_k=top_k)
 
@@ -147,6 +210,7 @@ def ask(question, top_k=5, show_sources=True):
             print(f"      {r['text'][:150]}...")
 
     # Step 2: Generate
+    # ANALOGY: Reader (Claude) studies the cards and answers
     print("\nGenerating answer...")
     answer = generate_answer(question, results)
 
@@ -154,19 +218,37 @@ def ask(question, top_k=5, show_sources=True):
     return answer
 
 # ============================================================
-# TEST IT
+# INTERACTIVE MODE
 # ============================================================
 print("\n" + "=" * 60)
-print("TESTING RAG PIPELINE")
+print("INTERACTIVE MODE")
 print("=" * 60)
+print("\nAsk any Harry Potter question!")
+print("Commands:")
+print("  'quit'     - exit")
+print("  'top X'    - change number of chunks retrieved (default 5)")
+print("  'sources'  - toggle showing retrieved passages")
+print("-" * 60)
 
-test_questions = [
-    "What spell did Harry use to defeat Voldemort?",
-    "How did Harry get his scar?",
-    "What are the three Deathly Hallows?",
-    "Who is the Half-Blood Prince?",
-]
+top_k = 5
+show_sources = True
 
-for q in test_questions:
-    ask(q)
+while True:
+    question = input("\n📖 Ask: ").strip()
+
+    if not question:
+        continue
+    if question.lower() == 'quit':
+        print("Goodbye!")
+        break
+    if question.lower().startswith('top '):
+        top_k = int(question.split()[1])
+        print(f"✓ Now retrieving top {top_k} chunks")
+        continue
+    if question.lower() == 'sources':
+        show_sources = not show_sources
+        print(f"✓ Show sources: {'ON' if show_sources else 'OFF'}")
+        continue
+
+    ask(question, top_k=top_k, show_sources=show_sources)
     print("\n" + "=" * 60)
